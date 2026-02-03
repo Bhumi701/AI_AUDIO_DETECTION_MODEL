@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from audio_utils import decode_audio
 from model import predict
 
-API_KEY = "YOUR_SECRET_KEY"
+API_KEY = "AIzaSyBelRXAJMPZpmdDxgohggt2TXr9E9y82kY"
 
 app = FastAPI(title="AI Generated Voice Detection API")
 
