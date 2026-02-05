@@ -36,11 +36,6 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 
-# Model artifacts (ignore trained model binaries)
-models/*.pkl
-models/*.joblib
-models/*.pickle
-
 # Dataset / large media files
 dataset/
 *.wav
