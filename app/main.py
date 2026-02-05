@@ -3,7 +3,7 @@ FastAPI Application for AI Audio Detection
 Optimized specifically for your Random Forest + SVM ensemble model
 Feature-compatible with your training code
 """
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import joblib
@@ -15,6 +15,7 @@ import logging
 import time
 import io
 import os
+import base64
 from functools import lru_cache
 from contextlib import asynccontextmanager
 import warnings
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 10485760))  # 10MB
 MAX_DURATION = int(os.getenv("MAX_AUDIO_DURATION", 30))
 MODEL_PATH = os.getenv("MODEL_PATH", "models")
+API_KEY = os.getenv("API_KEY", "buildathon2026")
 
 # Global variables
 rf_model = None
@@ -193,7 +195,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Response models
+# Request and Response models
+class AudioDetectionRequest(BaseModel):
+    language: str
+    audio_format: str
+    audio_base64_format: str
+
+class AudioDetectionResponse(BaseModel):
+    classification: str  # "SPOOF" or "REAL"
+    confidence: float
+    language: str
+
 class PredictionResponse(BaseModel):
     prediction: str
     confidence: float
@@ -212,13 +224,13 @@ class HealthResponse(BaseModel):
 async def root():
     """Root endpoint"""
     return {
-        "message": "AI Audio Detection API - RF+SVM Ensemble",
+        "message": "AI Audio Detection API - Voice Spoof Detection",
         "version": "1.0.0",
         "features": "352 advanced audio features",
         "models": "Random Forest + SVM",
         "endpoints": {
             "health": "/health",
-            "predict": "/predict (POST)",
+            "detect": "/detect (POST)",
             "docs": "/docs"
         }
     }
@@ -234,151 +246,98 @@ async def health_check():
         "ensemble_available": use_ensemble
     }
 
-@app.post("/predict", response_model=PredictionResponse)
-async def predict_audio(file: UploadFile = File(...)):
+@app.post("/detect", response_model=AudioDetectionResponse)
+async def detect_audio(request: AudioDetectionRequest, x_api_key: str = Header(None)):
     """
-    Predict if audio is AI-generated or real using your trained ensemble model
+    Detect if audio is SPOOF (AI-Generated) or REAL using base64-encoded audio
     
     Args:
-        file: Audio file (wav, mp3, flac supported)
+        request: AudioDetectionRequest with language, audio_format, and audio_base64_format
+        x_api_key: API key in header (required)
     
     Returns:
-        PredictionResponse with prediction and confidence
+        AudioDetectionResponse with classification, confidence, and language
     """
     start_time = time.time()
     
-    if not file:
-        raise HTTPException(status_code=400, detail="No file provided")
+    # Verify API key
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
     
-    # Check file size
-    contents = await file.read()
-    file_size = len(contents)
-    
-    if file_size > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"File too large. Max size: {MAX_FILE_SIZE/1024/1024}MB"
-        )
-    
-    # Check file extension
-    allowed_extensions = ['.wav', '.mp3', '.flac', '.ogg']
-    file_ext = os.path.splitext(file.filename)[1].lower()
-    if file_ext not in allowed_extensions:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file format. Allowed: {', '.join(allowed_extensions)}"
-        )
+    if not request.audio_base64_format:
+        raise HTTPException(status_code=400, detail="audio_base64_format is required")
     
     try:
-        # Load audio using soundfile (faster than librosa.load)
-        audio_data, sr = sf.read(io.BytesIO(contents))
+        # Decode base64 audio
+        audio_bytes = base64.b64decode(request.audio_base64_format)
+        audio_size = len(audio_bytes)
+        
+        if audio_size > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Audio too large. Max size: {MAX_FILE_SIZE/1024/1024}MB"
+            )
+        
+        # Load audio from bytes
+        audio_data, sr = sf.read(io.BytesIO(audio_bytes))
         
         # Convert to mono if stereo
         if len(audio_data.shape) > 1:
             audio_data = np.mean(audio_data, axis=1)
         
-        # Resample to 22050 Hz (SAME AS YOUR TRAINING)
+        # Resample to 22050 Hz
         target_sr = 22050
         if sr != target_sr:
             audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=target_sr)
             sr = target_sr
         
-        # Limit duration (first 2 seconds like your training)
-        duration = 2.0  # Your training uses 2 seconds
+        # Limit duration to 2 seconds
+        duration = 2.0
         max_samples = int(duration * sr)
         if len(audio_data) > max_samples:
             audio_data = audio_data[:max_samples]
         
-        # Extract features (SAME AS TRAINING)
+        # Extract features
         features = extract_advanced_features(audio_data, sr)
         features = features.reshape(1, -1)
         
-        logger.info(f"Extracted {features.shape[1]} features")
+        logger.info(f"Extracted {features.shape[1]} features from {request.audio_format} audio")
         
-        # Scale features using the same scaler from training
+        # Scale features
         if scaler is not None:
             features_scaled = scaler.transform(features)
         else:
             features_scaled = features
             logger.warning("No scaler available - using unscaled features")
         
-        # Make prediction: prefer Random Forest (`rf_model.pkl`) when available
+        # Make prediction
         if rf_model is not None:
-            # Use Random Forest by default
             prediction = rf_model.predict(features_scaled)[0]
             confidence = float(np.max(rf_model.predict_proba(features_scaled)))
-            model_used = "Random Forest (rf_model.pkl)"
-
-        elif use_ensemble and rf_model is not None and svm_model is not None:
-            # Ensemble fallback (not used when RF is present)
-            rf_proba = rf_model.predict_proba(features_scaled)[0]
-            svm_proba = svm_model.predict_proba(features_scaled)[0]
-            avg_proba = (rf_proba + svm_proba) / 2
-            prediction = np.argmax(avg_proba)
-            confidence = float(np.max(avg_proba))
-            model_used = "Ensemble (RF + SVM)"
-
         elif svm_model is not None:
-            # Use SVM only if RF is unavailable
             prediction = svm_model.predict(features_scaled)[0]
             confidence = float(np.max(svm_model.predict_proba(features_scaled)))
-            model_used = "SVM"
-
         else:
             raise HTTPException(status_code=500, detail="No model available for prediction")
         
-        # Interpret prediction (0 = Real, 1 = Fake)
-        is_ai_generated = bool(prediction == 1)
-        prediction_label = "🚨 Fake Audio (AI-Generated)" if is_ai_generated else "✓ Real Audio (Human)"
+        # Map prediction to classification: 0 = REAL, 1 = SPOOF
+        classification = "SPOOF" if prediction == 1 else "REAL"
         
         processing_time = time.time() - start_time
+        logger.info(f"Classification: {classification}, Confidence: {confidence:.2%}, Time: {processing_time:.2f}s")
         
-        logger.info(f"Prediction: {prediction_label}, Confidence: {confidence:.2%}, Time: {processing_time:.2f}s")
-        
-        return PredictionResponse(
-            prediction=prediction_label,
+        return AudioDetectionResponse(
+            classification=classification,
             confidence=confidence,
-            processing_time=processing_time,
-            is_ai_generated=is_ai_generated,
-            model_used=model_used
+            language=request.language
         )
     
+    except base64.binascii.Error:
+        logger.error("Invalid base64 encoding")
+        raise HTTPException(status_code=400, detail="Invalid base64 encoded audio")
     except Exception as e:
-        logger.error(f"Prediction error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
-    
-    finally:
-        await file.close()
-
-@app.post("/predict-batch")
-async def predict_batch(files: list[UploadFile] = File(...)):
-    """
-    Predict multiple audio files
-    
-    Args:
-        files: List of audio files (max 10)
-    
-    Returns:
-        List of predictions
-    """
-    if len(files) > 10:
-        raise HTTPException(status_code=400, detail="Maximum 10 files per batch")
-    
-    results = []
-    for file in files:
-        try:
-            result = await predict_audio(file)
-            results.append({
-                "filename": file.filename,
-                **result.dict()
-            })
-        except Exception as e:
-            results.append({
-                "filename": file.filename,
-                "error": str(e)
-            })
-    
-    return {"results": results}
+        logger.error(f"Detection error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Detection failed: {str(e)}")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
