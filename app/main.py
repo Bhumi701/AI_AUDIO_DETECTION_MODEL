@@ -198,8 +198,8 @@ app.add_middleware(
 # Request and Response models
 class AudioDetectionRequest(BaseModel):
     language: str
-    audio_format: str
-    audiobase64: str
+    audioFormat: str
+    audioBase64: str
 
 class AudioDetectionResponse(BaseModel):
     classification: str  # "SPOOF" or "REAL"
