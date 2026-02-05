@@ -199,7 +199,7 @@ app.add_middleware(
 class AudioDetectionRequest(BaseModel):
     language: str
     audio_format: str
-    audio_base64_format: str
+    audiobase64: str
 
 class AudioDetectionResponse(BaseModel):
     classification: str  # "SPOOF" or "REAL"
@@ -264,12 +264,12 @@ async def detect_audio(request: AudioDetectionRequest, x_api_key: str = Header(N
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
     
-    if not request.audio_base64_format:
-        raise HTTPException(status_code=400, detail="audio_base64_format is required")
+    if not request.audiobase64:
+        raise HTTPException(status_code=400, detail="audiobase64 is required")
     
     try:
         # Decode base64 audio
-        audio_bytes = base64.b64decode(request.audio_base64_format)
+        audio_bytes = base64.b64decode(request.audiobase64)
         audio_size = len(audio_bytes)
         
         if audio_size > MAX_FILE_SIZE:
