@@ -1,0 +1,68 @@
+# Virtual environments
+venv/
+env/
+.venv/
+venv\.vscode/
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Environment variables
+.env
+.env.*
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+~$*
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model artifacts (ignore trained model binaries)
+models/*.pkl
+models/*.joblib
+models/*.pickle
+
+# Dataset / large media files
+dataset/
+*.wav
+*.mp3
+*.flac
+*.ogg
+
+# Old or temporary files
+old_files/
+*.tmp
+*.cache
+
+# Sound / audio caches
+*.npy
+
+# Coverage and test outputs
+htmlcov/
+.coverage
+.pytest_cache/
+
+# Ignore OneDrive temporary files
+~*.*
+
+# Keep this file tracked
+!/.gitignore
