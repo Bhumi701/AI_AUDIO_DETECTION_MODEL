@@ -119,35 +119,45 @@ def load_models():
     global rf_model, svm_model, scaler, use_ensemble
     
     try:
-        logger.info("Loading models...")
+        logger.info("="*60)
+        logger.info("🚀 Loading AI Audio Detection Models")
+        logger.info(f"   Model path: {MODEL_PATH}")
+        logger.info("="*60)
         
         # Try to load Random Forest
         rf_path = os.path.join(MODEL_PATH, "rf_model.pkl")
         if os.path.exists(rf_path):
             rf_model = joblib.load(rf_path)
-            logger.info("Random Forest model loaded")
+            logger.info("✓ Random Forest model loaded")
+        else:
+            logger.warning(f"✗ Random Forest not found at {rf_path}")
         
         # Try to load SVM
         svm_path = os.path.join(MODEL_PATH, "svm_model.pkl")
         if os.path.exists(svm_path):
             svm_model = joblib.load(svm_path)
-            logger.info("SVM model loaded")
+            logger.info("✓ SVM model loaded")
+        else:
+            logger.warning(f"✗ SVM not found at {svm_path}")
         
         # Try to load scaler (REQUIRED)
         scaler_path = os.path.join(MODEL_PATH, "scaler.pkl")
         if os.path.exists(scaler_path):
             scaler = joblib.load(scaler_path)
-            logger.info("Scaler loaded")
+            logger.info("✓ Feature scaler loaded")
         else:
-            logger.warning("Scaler not found - this may cause issues!")
+            logger.warning(f"✗ Scaler not found at {scaler_path}")
         
         # Determine if we can use ensemble
         use_ensemble = (rf_model is not None) and (svm_model is not None)
         
         if not rf_model and not svm_model:
+            logger.error("✗ No models found! Please run setup_models.py or upload trained models.")
             raise Exception("No models found! Please save your trained models.")
         
-        logger.info(f"Models loaded successfully. Ensemble mode: {use_ensemble}")
+        logger.info("="*60)
+        logger.info(f"✓ Models ready. Using: {('Ensemble (RF+SVM)' if use_ensemble else 'Random Forest only')}")
+        logger.info("="*60)
         return True
         
     except Exception as e:
@@ -157,10 +167,14 @@ def load_models():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load models on startup"""
-    logger.info("Starting up...")
+    logger.info("\n" + "="*60)
+    logger.info("🔄 AI Audio Detection API - Starting Up")
+    logger.info("="*60)
     load_models()
+    logger.info("✓ API is READY for predictions")
+    logger.info("="*60 + "\n")
     yield
-    logger.info("Shutting down...")
+    logger.info("🛑 Shutting down...")
 
 # Initialize FastAPI app
 app = FastAPI(

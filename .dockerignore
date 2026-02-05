@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+.venv
+venv
+env
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local files
+*.log
+.env.local
+*.tmp
+
+# Old files
+old_files/
+
+# Large files (use Railway's persistent storage instead)
+*.wav
+*.mp3
+*.flac
+dataset/
+
+# Cache
+.pytest_cache
+.coverage
+htmlcov
