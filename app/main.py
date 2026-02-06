@@ -202,9 +202,11 @@ class AudioDetectionRequest(BaseModel):
     audioBase64: str
 
 class AudioDetectionResponse(BaseModel):
-    classification: str  # "SPOOF" or "REAL"
-    confidence: float
+    status: str
     language: str
+    classification: str
+    confidenceScore: float
+    explanation: str
 
 class PredictionResponse(BaseModel):
     prediction: str
@@ -310,9 +312,25 @@ async def detect_audio(request: AudioDetectionRequest, x_api_key: str = Header(N
         else:
             raise HTTPException(status_code=500, detail="No model available")
 
-        classification = "SPOOF" if prediction == 1 else "REAL"
+        # classification = "SPOOF" if prediction == 1 else "REAL"
+        
+        # Map numeric prediction to readable classification
+        is_ai_generated = prediction == 1
+        classification = "AI_GENERATED" if is_ai_generated else "HUMAN"
 
-        # Processing time logging 
+# Dynamic explanation based on prediction + confidence
+        if is_ai_generated:
+            if confidence > 0.9:
+                explanation = "Strong synthetic speech patterns and consistent spectral characteristics detected"
+            else:
+                explanation = "Some AI-generated vocal traits detected in spectral features"
+        else:
+            if confidence > 0.9:
+                explanation = "Clear natural human speech variations and organic pitch modulation detected"
+            else:
+                explanation = "Mostly natural speech characteristics observed"
+
+        # Processing time logging
         processing_time = time.time() - start_time
         logger.info(
             f"Classification: {classification}, "
@@ -320,11 +338,12 @@ async def detect_audio(request: AudioDetectionRequest, x_api_key: str = Header(N
             f"Time: {processing_time:.2f}s"
         )
 
-        # Proper response model 
         return AudioDetectionResponse(
+            status="success",
+            language=request.language,
             classification=classification,
-            confidence=confidence,
-            language=request.language
+            confidenceScore=round(confidence, 4),
+            explanation=explanation
         )
 
     except base64.binascii.Error:
